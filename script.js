@@ -26,6 +26,7 @@ const appState = {
   realtimeChannel: null,
   dashboardReloadTimer: null,
   reminderTimers: [],
+  selectedDate: getLocalDateString(),
   loading: false
 };
 
@@ -80,7 +81,7 @@ const onboardingSteps = [
   {
     key: "waterTracker",
     question: "Wasser-Tracking aktivieren?",
-    hint: "Schnell loggen, wie viele Glaeser du heute getrunken hast.",
+    hint: "Schnell in ml loggen und dein Tagesziel im Blick behalten.",
     yes() {
       appState.userSetup.waterTracker = true;
     },
@@ -574,7 +575,7 @@ async function saveProfile(values) {
 
 async function loadDashboard() {
   if (!appState.currentUser) return;
-  setDashboardMessage("Lade deine heutigen Daten...");
+  setDashboardMessage("Lade deine Daten...");
   showScreen("dashboard");
 
   try {
@@ -601,7 +602,7 @@ async function loadDashboard() {
 }
 
 async function fetchTodayRows(table, dateColumn, optional = false) {
-  const range = getTodayRange();
+  const range = getSelectedDateRange();
   const { data, error } = await appState.client
     .from(table)
     .select("*")
@@ -621,7 +622,7 @@ async function fetchHabitLogs() {
     .from("habit_logs")
     .select("*")
     .eq("user_id", appState.currentUser.id)
-    .eq("log_date", getLocalDateString())
+    .eq("log_date", appState.selectedDate)
     .order("created_at", { ascending: false });
   if (error) {
     if (isMissingTableError(error)) return [];
@@ -683,7 +684,7 @@ function renderDashboard() {
   setTodayLabel();
   els.dashboardGrid.innerHTML = "";
 
-  const modules = [renderStreakModule(), renderInsightsModule()];
+  const modules = [renderDateNavigator(), renderStreakModule(), renderInsightsModule()];
   if (profile.caffeine_enabled) modules.push(renderCaffeineModule());
   if (profile.sweet_drinks_enabled) modules.push(renderSweetDrinksModule());
   if (profile.fitness_enabled) modules.push(renderFitnessModule());
@@ -698,6 +699,32 @@ function renderDashboard() {
 
   bindDashboardModuleEvents();
   renderDashboardCharts();
+}
+
+function renderDateNavigator() {
+  const selected = new Date(`${appState.selectedDate}T12:00:00`);
+  const isToday = appState.selectedDate === getLocalDateString();
+  const label = new Intl.DateTimeFormat("de-DE", {
+    weekday: "long",
+    day: "2-digit",
+    month: "long"
+  }).format(selected);
+
+  return `
+    <section class="module-card date-card wide-card" aria-label="Tagesauswahl">
+      <div class="date-nav">
+        <button class="icon-btn" data-day-shift="-1" type="button" aria-label="Vorheriger Tag">&lt;</button>
+        <div>
+          <p class="eyebrow">${isToday ? "Heute" : "Archiv"}</p>
+          <h3>${escapeHtml(label)}</h3>
+        </div>
+        <div class="date-actions">
+          <button class="icon-btn" data-day-shift="1" type="button" aria-label="Nächster Tag" ${isToday ? "disabled" : ""}>&gt;</button>
+          <button class="btn btn-secondary" id="today-button" type="button" ${isToday ? "disabled" : ""}>Heute</button>
+        </div>
+      </div>
+    </section>
+  `;
 }
 
 function renderStreakModule() {
@@ -750,7 +777,7 @@ function renderInsightsModule() {
       </div>
       <div class="insight-strip">
         <span><strong>${summary.caffeine} mg</strong>Koffein</span>
-        <span><strong>${summary.water}</strong>Wasser</span>
+        <span><strong>${summary.water} ml</strong>Wasser</span>
         <span><strong>${summary.doneHabits}</strong>Habits</span>
       </div>
     </section>
@@ -781,6 +808,11 @@ function renderCaffeineModule() {
         <button class="pill-button" data-caffeine="Kaffee|80" type="button">Kaffee +80</button>
         <button class="pill-button" data-caffeine="Energy Drink|160" type="button">Energy +160</button>
         <button class="pill-button" data-caffeine="Cola|40" type="button">Cola +40</button>
+      </div>
+      <div class="row compact-row">
+        <input id="custom-caffeine-name-input" type="text" placeholder="Eigenes Getraenk">
+        <input id="custom-caffeine-mg-input" type="number" min="1" step="5" placeholder="mg">
+        <button id="add-custom-caffeine-button" class="btn btn-secondary" type="button">Loggen</button>
       </div>
       <ul class="log-list">${items || `<li class="empty-state">Heute noch kein Koffein geloggt.</li>`}</ul>
     </section>
@@ -874,9 +906,20 @@ function renderHabitsModule() {
 function renderWellnessModule() {
   const logs = appState.dashboardData.wellnessLogs;
   const latestSleep = logs.find((log) => log.type === "sleep");
-  const waterTotal = logs
-    .filter((log) => log.type === "water")
+  const waterLogs = logs.filter((log) => log.type === "water");
+  const waterTotal = waterLogs
     .reduce((sum, log) => sum + Number(log.value || 0), 0);
+  const waterGoal = getWaterGoal();
+  const waterPercent = Math.min(100, Math.round((waterTotal / waterGoal) * 100));
+  const waterItems = waterLogs.map((log) => `
+    <li class="log-item">
+      <span>${formatTime(log.created_at)}</span>
+      <div class="item-actions">
+        <strong>${Number(log.value || 0)} ml</strong>
+        <button class="icon-btn remove-btn" data-delete-wellness="${log.id}" type="button" aria-label="Wasser entfernen">x</button>
+      </div>
+    </li>
+  `).join("");
   const latestMood = logs.find((log) => log.type === "mood");
 
   return `
@@ -888,11 +931,17 @@ function renderWellnessModule() {
         </div>
       </div>
       ${appState.profile.water_enabled ? `
-        <div class="mini-metric"><strong>${waterTotal}</strong><span>Gläser Wasser</span></div>
+        <div class="mini-metric"><strong>${waterTotal} ml</strong><span>von ${waterGoal} ml Wasser</span></div>
+        <div class="meter"><div class="meter-fill fill-green" style="width:${waterPercent}%"></div></div>
         <div class="module-actions">
-          <button class="pill-button" data-wellness="water|1" type="button">+1 Glas</button>
-          <button class="pill-button" data-wellness="water|2" type="button">+2 Gläser</button>
+          <button class="pill-button" data-wellness="water|250" type="button">+250 ml</button>
+          <button class="pill-button" data-wellness="water|500" type="button">+500 ml</button>
         </div>
+        <div class="row compact-row">
+          <input id="custom-water-ml-input" type="number" min="1" step="50" placeholder="ml">
+          <button id="add-custom-water-button" class="btn btn-secondary" type="button">Wasser loggen</button>
+        </div>
+        <ul class="log-list">${waterItems || `<li class="empty-state">Heute noch kein Wasser.</li>`}</ul>
       ` : ""}
       ${appState.profile.sleep_enabled ? `
         <div class="row compact-row">
@@ -916,7 +965,10 @@ function renderNotesModule() {
   const notes = appState.dashboardData.notes;
   const items = notes.map((note) => `
     <li class="log-item note-item">
-      <span>${escapeHtml(note.body)}</span>
+      <div>
+        <span>${escapeHtml(note.body)}</span>
+        <p class="tiny-text">${formatTime(note.created_at)}</p>
+      </div>
       <button class="icon-btn remove-btn" data-delete-note="${note.id}" type="button" aria-label="Notiz entfernen">x</button>
     </li>
   `).join("");
@@ -929,7 +981,13 @@ function renderNotesModule() {
           <h3>Tagesjournal</h3>
         </div>
       </div>
-      <textarea id="note-input" rows="4" placeholder="Was war heute wichtig? Gedanken, Fortschritt, Energie, To-dos..."></textarea>
+      <div class="journal-prompts">
+        <button class="pill-button" data-journal-prompt="Heute lief gut: " type="button">Gut</button>
+        <button class="pill-button" data-journal-prompt="Energie / Mood: " type="button">Energie</button>
+        <button class="pill-button" data-journal-prompt="Morgen wichtig: " type="button">Morgen</button>
+      </div>
+      <textarea id="note-input" rows="5" maxlength="900" placeholder="Was war heute wichtig? Gedanken, Fortschritt, Energie, To-dos..."></textarea>
+      <p id="note-counter" class="tiny-text">0 / 900</p>
       <button id="add-note-button" class="btn btn-secondary btn-wide" type="button">Notiz speichern</button>
       <ul class="log-list">${items || `<li class="empty-state">Heute noch keine Notiz.</li>`}</ul>
     </section>
@@ -970,19 +1028,40 @@ function renderRemindersModule() {
         <input id="reminder-category-input" type="text" placeholder="Kategorie, z. B. Alltag">
         <button id="add-reminder-button" class="btn btn-secondary" type="button">Erinnern</button>
       </div>
-      <button id="notification-permission-button" class="btn btn-ghost btn-wide" type="button">Benachrichtigungen erlauben</button>
+      <p class="empty-state">Erinnerungen erscheinen in der App, wenn LifeLoop offen ist.</p>
       <ul class="log-list">${items || `<li class="empty-state">Noch keine Erinnerungen.</li>`}</ul>
     </section>
   `;
 }
 
 function bindDashboardModuleEvents() {
+  els.dashboardGrid.querySelectorAll("[data-day-shift]").forEach((button) => {
+    button.addEventListener("click", () => changeSelectedDate(Number(button.dataset.dayShift)));
+  });
+  document.getElementById("today-button")?.addEventListener("click", () => {
+    appState.selectedDate = getLocalDateString();
+    loadDashboard();
+  });
+
   els.dashboardGrid.querySelectorAll("[data-caffeine]").forEach((button) => {
     button.addEventListener("click", () => {
       const [drinkType, amount] = button.dataset.caffeine.split("|");
       addCaffeineLog(drinkType, Number(amount), button);
     });
   });
+
+  const caffeineButton = document.getElementById("add-custom-caffeine-button");
+  const caffeineNameInput = document.getElementById("custom-caffeine-name-input");
+  const caffeineMgInput = document.getElementById("custom-caffeine-mg-input");
+  if (caffeineButton && caffeineNameInput && caffeineMgInput) {
+    const saveCustomCaffeine = () => addCaffeineLog(caffeineNameInput.value.trim(), Number(caffeineMgInput.value), caffeineButton);
+    caffeineButton.addEventListener("click", saveCustomCaffeine);
+    [caffeineNameInput, caffeineMgInput].forEach((input) => {
+      input.addEventListener("keydown", (event) => {
+        if (event.key === "Enter") saveCustomCaffeine();
+      });
+    });
+  }
 
   els.dashboardGrid.querySelectorAll("[data-sweet-drink]").forEach((button) => {
     button.addEventListener("click", () => addSweetDrinkLog(button.dataset.sweetDrink, button));
@@ -1021,6 +1100,19 @@ function bindDashboardModuleEvents() {
     });
   });
 
+  const waterButton = document.getElementById("add-custom-water-button");
+  const waterInput = document.getElementById("custom-water-ml-input");
+  if (waterButton && waterInput) {
+    waterButton.addEventListener("click", () => addWellnessLog("water", Number(waterInput.value), "ml", waterButton));
+    waterInput.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") addWellnessLog("water", Number(waterInput.value), "ml", waterButton);
+    });
+  }
+
+  els.dashboardGrid.querySelectorAll("[data-delete-wellness]").forEach((button) => {
+    button.addEventListener("click", () => deleteRow("wellness_logs", button.dataset.deleteWellness, button));
+  });
+
   els.dashboardGrid.querySelectorAll("[data-mood]").forEach((button) => {
     button.addEventListener("click", () => addWellnessLog("mood", 0, button.dataset.mood, button));
   });
@@ -1033,8 +1125,19 @@ function bindDashboardModuleEvents() {
 
   const noteButton = document.getElementById("add-note-button");
   const noteInput = document.getElementById("note-input");
+  const noteCounter = document.getElementById("note-counter");
   if (noteButton && noteInput) {
     noteButton.addEventListener("click", () => addNote(noteInput.value.trim(), noteButton));
+    noteInput.addEventListener("input", () => {
+      if (noteCounter) noteCounter.textContent = `${noteInput.value.length} / 900`;
+    });
+    els.dashboardGrid.querySelectorAll("[data-journal-prompt]").forEach((button) => {
+      button.addEventListener("click", () => {
+        noteInput.value = `${noteInput.value}${noteInput.value ? "\n" : ""}${button.dataset.journalPrompt}`;
+        noteInput.focus();
+        if (noteCounter) noteCounter.textContent = `${noteInput.value.length} / 900`;
+      });
+    });
   }
 
   els.dashboardGrid.querySelectorAll("[data-delete-note]").forEach((button) => {
@@ -1051,11 +1154,6 @@ function bindDashboardModuleEvents() {
     });
   }
 
-  const permissionButton = document.getElementById("notification-permission-button");
-  if (permissionButton) {
-    permissionButton.addEventListener("click", () => requestNotificationPermission(permissionButton));
-  }
-
   els.dashboardGrid.querySelectorAll("[data-reminder-toggle]").forEach((input) => {
     input.addEventListener("change", () => toggleReminder(input.dataset.reminderToggle, input.checked));
   });
@@ -1066,11 +1164,13 @@ function bindDashboardModuleEvents() {
 }
 
 async function addCaffeineLog(drinkType, amountMg, button) {
+  if (!drinkType || !Number.isFinite(amountMg) || amountMg <= 0) return showToast("Bitte Getraenk und mg eingeben.", "error");
   await runAction(button, async () => {
     const { error } = await appState.client.from("caffeine_logs").insert({
       user_id: appState.currentUser.id,
       drink_type: drinkType,
-      amount_mg: amountMg
+      amount_mg: amountMg,
+      created_at: getLogTimestampForSelectedDate()
     });
     if (error) throw error;
     await loadDashboard();
@@ -1082,7 +1182,8 @@ async function addSweetDrinkLog(type, button) {
   await runAction(button, async () => {
     const { error } = await appState.client.from("sweet_drinks_logs").insert({
       user_id: appState.currentUser.id,
-      type
+      type,
+      created_at: getLogTimestampForSelectedDate()
     });
     if (error) throw error;
     await loadDashboard();
@@ -1095,7 +1196,8 @@ async function addFitnessLog(workoutName, button) {
     const { error } = await appState.client.from("fitness_logs").insert({
       user_id: appState.currentUser.id,
       workout_name: workoutName,
-      done: false
+      done: false,
+      created_at: getLogTimestampForSelectedDate()
     });
     if (error) throw error;
     await loadDashboard();
@@ -1131,7 +1233,7 @@ async function toggleHabitDone(habitName, completed) {
         user_id: appState.currentUser.id,
         habit_name: habitName,
         completed: true,
-        log_date: getLocalDateString()
+        log_date: appState.selectedDate
       });
       if (error) throw error;
     }
@@ -1148,7 +1250,8 @@ async function addWellnessLog(type, value, note, button) {
       user_id: appState.currentUser.id,
       type,
       value,
-      note
+      note,
+      created_at: getLogTimestampForSelectedDate()
     });
     if (error) throw error;
     await loadDashboard();
@@ -1160,7 +1263,8 @@ async function addNote(body, button) {
   await runAction(button, async () => {
     const { error } = await appState.client.from("notes").insert({
       user_id: appState.currentUser.id,
-      body
+      body,
+      created_at: getLogTimestampForSelectedDate()
     });
     if (error) throw error;
     await loadDashboard();
@@ -1242,6 +1346,7 @@ function renderSettings() {
       <h3>Colorway</h3>
       <div class="colorway-grid">
         ${renderColorwayButton("system", "System", "#d8dde8")}
+        ${renderColorwayButton("light", "White", "#ffffff")}
         ${renderColorwayButton("classic", "Classic", "#454694")}
         ${renderColorwayButton("blue", "Blue", "#2f80ff")}
         ${renderColorwayButton("green", "Green", "#22a06b")}
@@ -1255,6 +1360,14 @@ function renderSettings() {
       <div class="row">
         <input id="settings-caffeine-limit" type="number" min="1" step="10" value="${Number(profile.caffeine_limit || 400)}">
         <button id="save-caffeine-limit-button" class="btn btn-secondary" type="button">Speichern</button>
+      </div>
+    </section>
+
+    <section class="settings-section">
+      <h3>Wasser-Ziel</h3>
+      <div class="row">
+        <input id="settings-water-goal" type="number" min="250" step="50" value="${getWaterGoal()}">
+        <button id="save-water-goal-button" class="btn btn-secondary" type="button">Speichern</button>
       </div>
     </section>
 
@@ -1311,6 +1424,18 @@ function bindSettingsEvents() {
     const caffeineLimit = Number(document.getElementById("settings-caffeine-limit").value);
     if (!Number.isFinite(caffeineLimit) || caffeineLimit < 1) return showToast("Bitte ein gültiges Limit eingeben.", "error");
     await updateSettings({ caffeine_limit: caffeineLimit }, event.currentTarget);
+  });
+
+  document.getElementById("save-water-goal-button").addEventListener("click", async (event) => {
+    const waterGoal = Number(document.getElementById("settings-water-goal").value);
+    if (!Number.isFinite(waterGoal) || waterGoal < 250) return showToast("Bitte ein gueltiges Wasserziel eingeben.", "error");
+    setWaterGoal(waterGoal);
+    await runAction(event.currentTarget, async () => {
+      renderSettings();
+      await loadDashboard();
+      openOverlay("settings");
+      showToast("Wasserziel gespeichert.");
+    });
   });
 
   const toggleMap = [
@@ -1446,9 +1571,22 @@ function getProfileHabits() {
   return Array.isArray(appState.profile?.custom_habits) ? [...appState.profile.custom_habits] : [];
 }
 
+function getWaterGoal() {
+  const userKey = appState.currentUser?.id || "local";
+  const saved = Number(localStorage.getItem(`lifeloop-water-goal-${userKey}`));
+  return Number.isFinite(saved) && saved >= 250 ? saved : 2500;
+}
+
+function setWaterGoal(value) {
+  const userKey = appState.currentUser?.id || "local";
+  localStorage.setItem(`lifeloop-water-goal-${userKey}`, String(Math.round(value)));
+}
+
 function applyColorway(colorway) {
   const colorMap = {
     system: getSystemColorway(),
+    light: { bg: "#f4f7fb", body2: "#e8edf5", surface: "#ffffff", surface2: "#eef3fa", text: "#121722", muted: "rgba(18, 23, 34, 0.68)", line: "rgba(18, 23, 34, 0.13)", accent: "#3157d4", accent2: "#0f9f9a", rgb: "49, 87, 212" },
+    white: { bg: "#f4f7fb", body2: "#e8edf5", surface: "#ffffff", surface2: "#eef3fa", text: "#121722", muted: "rgba(18, 23, 34, 0.68)", line: "rgba(18, 23, 34, 0.13)", accent: "#3157d4", accent2: "#0f9f9a", rgb: "49, 87, 212" },
     classic: { bg: "#15171c", body2: "#0f1116", surface: "#20242f", surface2: "#292f3d", text: "#f5f7ff", muted: "rgba(245, 247, 255, 0.74)", line: "rgba(255,255,255,0.16)", accent: "#454694", accent2: "#5678ff", rgb: "69, 70, 148" },
     blue: { bg: "#101820", body2: "#0b1219", surface: "#172432", surface2: "#203449", text: "#f4fbff", muted: "rgba(244, 251, 255, 0.74)", line: "rgba(255,255,255,0.16)", accent: "#2f80ff", accent2: "#70c7ff", rgb: "47, 128, 255" },
     green: { bg: "#111a16", body2: "#0b120f", surface: "#18271f", surface2: "#203529", text: "#f4fff8", muted: "rgba(244, 255, 248, 0.74)", line: "rgba(255,255,255,0.16)", accent: "#22a06b", accent2: "#7ee2a8", rgb: "34, 160, 107" },
@@ -1555,26 +1693,8 @@ function cleanupRealtimeSubscription() {
   appState.realtimeChannel = null;
 }
 
-async function requestNotificationPermission(button) {
-  if (!("Notification" in window)) {
-    showToast("Dieser Browser unterstuetzt keine Benachrichtigungen.", "error");
-    return;
-  }
-
-  await runAction(button, async () => {
-    const permission = await Notification.requestPermission();
-    if (permission === "granted") {
-      showToast("Benachrichtigungen sind aktiv.");
-      scheduleReminderNotifications();
-    } else {
-      showToast("Benachrichtigungen wurden nicht erlaubt.", "error");
-    }
-  });
-}
-
 function scheduleReminderNotifications() {
   clearReminderTimers();
-  if (!("Notification" in window) || Notification.permission !== "granted") return;
   const reminders = appState.dashboardData.reminders.filter((reminder) => reminder.enabled);
   reminders.forEach((reminder) => {
     const delay = getDelayUntilTime(reminder.reminder_time);
@@ -1582,7 +1702,6 @@ function scheduleReminderNotifications() {
     const timerId = window.setTimeout(() => showReminderNotification(reminder), delay);
     appState.reminderTimers.push(timerId);
   });
-  scheduleMotivationalNotification();
 }
 
 function clearReminderTimers() {
@@ -1601,42 +1720,7 @@ function getDelayUntilTime(timeValue) {
 }
 
 function showReminderNotification(reminder) {
-  if (!("Notification" in window) || Notification.permission !== "granted") return;
-  showAppNotification("LifeLoop Erinnerung", {
-    body: `${reminder.title}${reminder.category ? ` (${reminder.category})` : ""}`,
-    tag: `lifeloop-${reminder.id}-${getLocalDateString()}`
-  });
   showToast(`Erinnerung: ${reminder.title}`);
-}
-
-function scheduleMotivationalNotification() {
-  const target = new Date();
-  target.setHours(17, 30, 0, 0);
-  const delay = target.getTime() - Date.now();
-  if (delay <= 0) return;
-  const timerId = window.setTimeout(() => {
-    const summary = getTodaySummary();
-    const limit = Number(appState.profile?.caffeine_limit || 400);
-    const remaining = Math.max(0, limit - summary.caffeine);
-    const body = summary.score >= 70
-      ? `Starker Tag: ${summary.score}/100 Fokus. Halte deinen Loop.`
-      : `Kurzer Check-in? Noch ${remaining} mg Koffein bis zu deinem Limit.`;
-    showAppNotification("LifeLoop Check-in", {
-      body,
-      tag: `lifeloop-coach-${getLocalDateString()}`
-    });
-  }, delay);
-  appState.reminderTimers.push(timerId);
-}
-
-function showAppNotification(title, options) {
-  if (navigator.serviceWorker?.ready) {
-    navigator.serviceWorker.ready
-      .then((registration) => registration.showNotification(title, { icon: "icon.svg", badge: "icon.svg", ...options }))
-      .catch(() => new Notification(title, options));
-    return;
-  }
-  new Notification(title, options);
 }
 
 async function runAction(control, action) {
@@ -1675,11 +1759,21 @@ function setTodayLabel() {
     day: "2-digit",
     month: "long",
     year: "numeric"
-  }).format(new Date());
+  }).format(new Date(`${appState.selectedDate}T12:00:00`));
 }
 
 function getTodayRange() {
+  return getDateRange(getLocalDateString());
+}
+
+function getSelectedDateRange() {
+  return getDateRange(appState.selectedDate);
+}
+
+function getDateRange(dateKey) {
   const start = new Date();
+  const [year, month, day] = String(dateKey || getLocalDateString()).split("-").map(Number);
+  start.setFullYear(year, month - 1, day);
   start.setHours(0, 0, 0, 0);
   const end = new Date(start);
   end.setDate(end.getDate() + 1);
@@ -1687,6 +1781,20 @@ function getTodayRange() {
     start: start.toISOString(),
     end: end.toISOString()
   };
+}
+
+function getLogTimestampForSelectedDate() {
+  const now = new Date();
+  const selected = new Date(`${appState.selectedDate}T12:00:00`);
+  selected.setHours(now.getHours(), now.getMinutes(), now.getSeconds(), now.getMilliseconds());
+  return selected.toISOString();
+}
+
+function changeSelectedDate(dayShift) {
+  const next = addDays(new Date(`${appState.selectedDate}T12:00:00`), dayShift);
+  const today = new Date(`${getLocalDateString()}T12:00:00`);
+  appState.selectedDate = toLocalDateString(next > today ? today : next);
+  loadDashboard();
 }
 
 function getLocalDateString() {
@@ -1784,28 +1892,31 @@ function getTodaySummary() {
   const doneFitness = appState.dashboardData.fitnessLogs.filter((item) => item.done).length;
   const mood = appState.dashboardData.wellnessLogs.find((log) => log.type === "mood")?.note || "";
   const moodBoost = mood === "Super" ? 14 : mood === "Okay" ? 7 : mood === "Low" ? -8 : 0;
-  const caffeineBalance = caffeine > 400 ? -18 : caffeine > 0 ? Math.min(18, Math.round(caffeine / 25)) : 0;
-  const score = clamp(48 + water * 4 + doneHabits * 8 + doneFitness * 10 + moodBoost + caffeineBalance, 0, 100);
+  const caffeineLimit = Number(appState.profile?.caffeine_limit || 400);
+  const caffeineBalance = caffeine > caffeineLimit ? -16 : caffeine > 0 ? Math.min(12, Math.round(caffeine / 45)) : 0;
+  const waterBoost = Math.min(16, Math.round((water / getWaterGoal()) * 16));
+  const score = clamp(50 + waterBoost + doneHabits * 8 + doneFitness * 10 + moodBoost + caffeineBalance, 0, 100);
 
   return { caffeine, water, doneHabits, doneFitness, mood, score };
 }
 
 function getEnergyChartData() {
+  const base = getTodaySummary().score;
   const points = [
-    { label: "Morgen", value: 42 },
-    { label: "Mittag", value: 50 },
-    { label: "Nachmittag", value: 46 },
-    { label: "Abend", value: 40 }
+    { label: "Morgen", value: base - 6 },
+    { label: "Mittag", value: base },
+    { label: "Nachmittag", value: base - 3 },
+    { label: "Abend", value: base - 8 }
   ];
 
   appState.dashboardData.caffeineLogs.forEach((log) => {
     const index = getDaySegmentIndex(log.created_at);
-    points[index].value += Math.min(20, Number(log.amount_mg || 0) / 16);
+    points[index].value += Math.min(14, Number(log.amount_mg || 0) / 35);
   });
 
   appState.dashboardData.wellnessLogs.forEach((log) => {
     const index = getDaySegmentIndex(log.created_at);
-    if (log.type === "water") points[index].value += Number(log.value || 0) * 5;
+    if (log.type === "water") points[index].value += Math.min(8, Number(log.value || 0) / 180);
     if (log.type === "sleep") points[0].value += Number(log.value || 0) >= 7 ? 10 : -6;
     if (log.type === "mood") points[index].value += log.note === "Super" ? 12 : log.note === "Okay" ? 6 : -8;
   });
