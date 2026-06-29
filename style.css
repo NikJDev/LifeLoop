@@ -1,0 +1,163 @@
+/* --- GRUNDEINSTELLUNGEN --- */
+body {
+  background-color: #15171c;
+  color: white;
+  font-weight: bold;
+  height: 100vh; 
+  margin: 0;              
+  padding: 30px;          
+  box-sizing: border-box; 
+  /* Verhindert Scrollbalken während der Animation */
+  overflow: hidden; 
+}
+
+h1, h2, h3 {
+  font-family: "Orbitron", sans-serif;
+}
+
+/* --- LOGO BEREICH --- */
+.logo-box {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  margin-top: 15%;
+}
+
+.logo-simpel {
+  font-family: "Orbitron", sans-serif;
+  font-size: 32px;
+  cursor: pointer;
+  letter-spacing: 1px;
+  margin-bottom: 30px;
+}
+
+.Habit-teil {
+  color: white;
+  font-weight: 300;
+}
+
+.Loop-teil {
+  color: rgb(69, 70, 148);
+  font-weight: 900;
+  text-shadow: 0px 0px 8px rgba(255, 255, 255, 0.4);
+}
+
+.logo-simpel:hover .Loop-teil {
+  color: white;
+  text-shadow: 0px 0px 12px rgba(255, 255, 255, 0.8);
+  transition: 0.3s;
+}
+
+/* --- START BUTTON BEREICH --- */
+.start-box {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+}
+
+.leben-aendern-btn {
+  display: inline-block;
+  background-color: rgb(69, 70, 148);
+  color: white; /* Schriftfarbe auf weiß geändert, damit man es besser liest */
+  padding: 10px 20px;
+  margin-top: 10px;
+  text-decoration: none; 
+  border-radius: 25px;   
+  font-family: 'Orbitron', sans-serif;
+  transition: 0.3s;
+  font-size: 16px;
+}
+
+.leben-aendern-btn:hover {
+  font-size: 20px;
+  box-shadow: 0px 0px 15px rgba(69, 70, 148, 0.8); /* Cooles Leuchten passend zur Farbe */
+}
+
+/* --- ANIMATIONS-ZUSTÄNDE (Gesteuert durch JavaScript) --- */
+
+/* Wenn die Startseite verschwindet */
+.fade-out {
+  opacity: 0;
+  transform: scale(0.95);
+  transition: all 0.5s ease-in-out;
+}
+
+/* --- ANMELDE-FENSTER --- */
+
+/* Der versteckte Rahmen für das Anmeldefenster */
+.anmelde-overlay {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 80vh;
+  
+  /* Unsichtbar und verschoben am Start */
+  opacity: 0;
+  transform: translateY(40px);
+  pointer-events: none; /* Blockiert Klicks, solange es unsichtbar ist */
+  transition: all 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Wird durch JS hinzugefügt: Macht das Fenster sichtbar */
+.anmelde-overlay.active {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: all;
+}
+
+/* Die eigentliche Box */
+.anmelde-box {
+  border: 2px solid rgb(69, 70, 148); /* Rahmen in der HabitLoop-Farbe */
+  border-radius: 10px;
+  padding: 30px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 20px;
+  width: 300px; 
+  background-color: rgba(0, 0, 0, 0.3); /* Leichter dunkler Hintergrund */
+  box-shadow: 0px 0px 20px rgba(69, 70, 148, 0.2);
+}
+
+.anmelde-h2 {
+  margin: 0;
+  color: white;
+}
+
+.eingabe-feld {
+  border: 2px solid white;
+  border-radius: 5px;
+  padding: 12px;
+  background-color: transparent;
+  color: white;
+  width: 100%;
+  box-sizing: border-box; /* Damit das Padding die Breite nicht sprengt */
+  font-family: sans-serif;
+  transition: 0.3s;
+}
+
+/* Wenn man in das Feld klickt */
+.eingabe-feld:focus {
+  outline: none;
+  border-color: rgb(69, 70, 148);
+}
+
+.weiter-btn {
+  font-family: "Orbitron" , sans-serif;
+  text-decoration: none;
+  color: white;
+  background-color: rgb(69, 70, 148);
+  padding: 10px 25px;
+  border-radius: 25px;
+  transition: 0.3s;
+  font-size: 16px;
+  margin-top: 10px;
+}
+
+.weiter-btn:hover {
+  font-size: 18px;
+  box-shadow: 0px 0px 15px rgba(69, 70, 148, 0.8);
+}
