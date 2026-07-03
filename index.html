@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#15171c">
+  <meta name="description" content="LifeLoop ist ein kostenloses Habit-, Journal- und Routine-Dashboard.">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icon.svg">
+  <title>LifeLoop</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="app" class="app-shell">
+    <section id="start-screen" class="screen active" aria-labelledby="start-title">
+      <div class="start-layout">
+        <div class="logo-simple" aria-hidden="true">
+          <span class="logo-life">Life</span><span class="logo-loop">Loop</span>
+        </div>
+        <p class="eyebrow">Personal Life Tracking</p>
+        <h1 id="start-title">LifeLoop</h1>
+        <p class="tagline">Tracke Routinen, Energie, Journal, Fokus und Fortschritt in einem schnellen Dashboard, das sich deinem Alltag anpasst.</p>
+        <button id="start-button" class="btn btn-primary btn-large" type="button">Start</button>
+      </div>
+    </section>
+
+    <section id="auth-screen" class="screen" aria-labelledby="auth-title">
+      <div class="auth-card">
+        <button id="auth-back-button" class="btn btn-ghost small-action" type="button">Zurück</button>
+        <div>
+          <p class="eyebrow">Willkommen</p>
+          <h2 id="auth-title">Einloggen</h2>
+          <p id="auth-subtitle" class="muted">Melde dich an und öffne deinen LifeLoop.</p>
+        </div>
+
+        <form id="auth-form" novalidate>
+          <div id="name-field" class="field hidden">
+            <label for="auth-name">Name</label>
+            <input id="auth-name" type="text" autocomplete="name" placeholder="Dein Name">
+          </div>
+
+          <div class="field">
+            <label for="auth-email">E-Mail</label>
+            <input id="auth-email" type="email" autocomplete="email" placeholder="du@example.com" required>
+          </div>
+
+          <div class="field password-field">
+            <label for="auth-password">Passwort</label>
+            <div class="input-with-button">
+              <input id="auth-password" type="password" autocomplete="current-password" placeholder="Mindestens 6 Zeichen" required>
+              <button id="toggle-password-button" class="icon-btn text-icon" type="button" aria-label="Passwort anzeigen">Aa</button>
+            </div>
+          </div>
+
+          <div id="confirm-field" class="field hidden">
+            <label for="auth-password-confirm">Passwort bestätigen</label>
+            <input id="auth-password-confirm" type="password" autocomplete="new-password" placeholder="Passwort wiederholen">
+          </div>
+
+          <p id="auth-message" class="form-message" role="alert"></p>
+          <button id="auth-submit-button" class="btn btn-primary btn-wide" type="submit">Einloggen</button>
+        </form>
+
+        <button id="auth-mode-button" class="link-button" type="button">Noch kein Konto? Registrieren</button>
+      </div>
+    </section>
+
+    <section id="onboarding-screen" class="screen" aria-labelledby="onboarding-question">
+      <div class="onboarding-shell">
+        <div class="progress-wrap" aria-label="Onboarding Fortschritt">
+          <div id="onboarding-progress" class="progress-bar"></div>
+        </div>
+        <div id="onboarding-card" class="question-card"></div>
+      </div>
+    </section>
+
+    <section id="dashboard-screen" class="screen" aria-labelledby="dashboard-title">
+      <header class="dashboard-header">
+        <div>
+          <p id="today-label" class="eyebrow"></p>
+          <h2 id="dashboard-title">Hallo</h2>
+        </div>
+        <div class="header-actions">
+          <button id="reload-dashboard-button" class="icon-btn" type="button" aria-label="Dashboard aktualisieren">↻</button>
+          <button id="open-settings-button" class="btn btn-secondary" type="button">Settings</button>
+        </div>
+      </header>
+
+      <div id="dashboard-message" class="inline-message hidden"></div>
+      <main id="dashboard-grid" class="dashboard-grid"></main>
+    </section>
+  </div>
+
+  <aside id="settings-overlay" class="overlay hidden" aria-hidden="true">
+    <div class="overlay-backdrop" data-close-settings></div>
+    <section class="settings-panel" aria-labelledby="settings-title">
+      <header class="panel-header">
+        <div>
+          <p class="eyebrow">LifeLoop</p>
+          <h2 id="settings-title">Settings</h2>
+        </div>
+        <button id="close-settings-button" class="icon-btn" type="button" aria-label="Settings schließen">×</button>
+      </header>
+      <div id="settings-content" class="settings-content"></div>
+    </section>
+  </aside>
+
+  <div id="toast-area" class="toast-area" aria-live="polite" aria-atomic="true"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.9/dist/chart.umd.min.js"></script>
+  <script src="script.js"></script>
+</body>
+</html>
