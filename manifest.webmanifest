@@ -1,0 +1,19 @@
+{
+  "name": "LifeLoop",
+  "short_name": "LifeLoop",
+  "description": "Kostenloses Habit-, Journal- und Routine-Dashboard.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#15171c",
+  "theme_color": "#15171c",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "LifeLoop.png",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
