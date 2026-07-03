@@ -1,7 +1,7 @@
 {
   "name": "LifeLoop",
   "short_name": "LifeLoop",
-  "description": "Kostenloses Habit-, Journal- und Routine-Dashboard.",
+  "description": "Habit and Life tracker! Be the best version of yourself",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
@@ -10,7 +10,7 @@
   "orientation": "portrait-primary",
   "icons": [
     {
-      "src": "LifeLoop.png",
+      "src": "LifeLoop-mini-icon.jpeg",
       "sizes": "any",
       "type": "image/svg+xml",
       "purpose": "any maskable"
